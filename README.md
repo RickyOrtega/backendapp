@@ -4,7 +4,8 @@ Esta guía proporciona instrucciones detalladas sobre cómo instalar, configurar
 
 ## Requisitos Previos
 
-- Asegúrate de tener instalado Node.js y npm en tu sistema local.
+- Asegúrate de tener instalado Python y pip en tu sistema local.
+- Configura un servidor PostgreSQL y asegúrate de tener las credenciales necesarias para conectarte a la base de datos.
 
 ## Instalación
 
