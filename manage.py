@@ -20,3 +20,11 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+    from django.core.management import execute_from_command_line
+
+    # Llama a la función para crear el usuario predeterminado
+    from sistemasusuarios.signals import create_default_user
+    create_default_user()
+
+    execute_from_command_line(sys.argv)

@@ -1,34 +1,35 @@
 import json
 
-from rest_framework import status
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login
+from django.contrib.auth.models import User
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework.permissions import IsAuthenticated
 
+
+from sistemasusuarios.email_service import send_info_email
 from sistemasusuarios.models import Empleado
-from sistemasusuarios.serializers import EmpleadoSerializer, TelefonoSerializer, EmailSerializer
+from sistemasusuarios.serializers import EmpleadoSerializer, TelefonoSerializer, EmailSerializer, MyTokenObtainPairSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from django.db import connection
+from rest_framework.response import Response
+from django.middleware.csrf import get_token
 
 # Registro y loggeo de usuarios:
 
 
-@api_view(['POST'])
-def register_user(request):
-    username = request.data.get('username')
-    email = request.data.get('email')
-    password = request.data.get('password')
-
-    if not username or not email or not password:
-        return Response({'error': 'Missing username, email, or password'}, status=status.HTTP_400_BAD_REQUEST, content_type='application/json')
-
-    if User.objects.filter(username=username).exists():
-        return Response({'error': 'Username already exists'}, status=status.HTTP_400_BAD_REQUEST, content_type='application/json')
-
-    user = User.objects.create_user(username, email, password)
-    return Response({'message': 'User registered successfully'}, status=status.HTTP_201_CREATED, content_type='application/json')
+# Vista para obtener el token JWT
+class MyTokenObtainPairView(TokenObtainPairView):
+    serializer_class = MyTokenObtainPairSerializer
 
 
+# Vista para refrescar el token JWT
+class MyTokenRefreshView(TokenRefreshView):
+    pass
+
+
+@csrf_exempt
 @api_view(['POST'])
 def login_user(request):
     username = request.data.get('username')
@@ -36,11 +37,25 @@ def login_user(request):
 
     user = authenticate(request, username=username, password=password)
 
+    token = get_token(request)
+
     if user is not None:
         login(request, user)
-        return Response({'message': 'User logged in successfully'}, status=status.HTTP_200_OK, content_type='application/json')
+        return Response({"mensaje": "Inicio de sesión exitoso"}, status=status.HTTP_200_OK)
     else:
-        return Response({'error': 'Invalid username or password'}, status=status.HTTP_401_UNAUTHORIZED, content_type='application/json')
+        try:
+            # Verifica si el usuario ya existe antes de intentar crear uno nuevo
+            user = User.objects.get(username=username)
+            return Response({"error": "El usuario ya existe, pero la contraseña es incorrecta"}, status=status.HTTP_400_BAD_REQUEST)
+        except User.DoesNotExist:
+            # Si el usuario no existe, entonces intenta crear uno nuevo
+            user = User.objects.create_user(username=username, password=password)
+            user.save()
+
+            # Inicia sesión con el nuevo usuario creado
+            login(request, user)
+            return Response({"mensaje": "Usuario creado y sesión iniciada", "csrfToken": token}, status=status.HTTP_200_OK)
+
 
 # Funciones CRUD:
 
@@ -75,6 +90,9 @@ def crear_empleado(request):
         serializer_email = EmailSerializer(data=datos_email)
         if serializer_email.is_valid():
             serializer_email.save(empleado_id=id_empleado)
+
+        empleado = Empleado.objects.get(id=id_empleado)
+        send_info_email(datos_email.get('email'), empleado)
 
         return Response({"mensaje": f"Empleado {id_empleado} creado con éxito"}, status=status.HTTP_201_CREATED, content_type='application/json')
 
@@ -157,7 +175,6 @@ def actualizar_empleado(request, pk):
         serializer_email.save()
 
     return Response({"mensaje": "Empleado actualizado correctamente"}, status=status.HTTP_200_OK, content_type='application/json')
-
 
 
 # Endpoint para eliminar un empleado

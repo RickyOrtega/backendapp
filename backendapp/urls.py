@@ -1,19 +1,22 @@
 from django.urls import path
 from sistemasusuarios.views import (
-    register_user,
-    login_user,
     listar_empleados,
     detalle_empleado,
     crear_empleado,
     eliminar_empleado,
     actualizar_empleado,
-    testear_conexion_bd
+    testear_conexion_bd,
+    MyTokenObtainPairView,
+    MyTokenRefreshView,
+    login_user
 )
 
 urlpatterns = [
     # Registro y login
-    path('register/', register_user, name='register'),
-    path('login/', login_user, name='login'),
+    path('api/login/', login_user, name='login'),
+    path('api/token/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/', MyTokenRefreshView.as_view(), name='token_refresh'),
+
 
     # Empleados
     path('api/empleados/crear-empleado/', crear_empleado, name='crear-empleados'),
