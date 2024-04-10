@@ -25,7 +25,7 @@ class Empleado(models.Model):
 
 class Telefono(models.Model):
 	TIPO_CHOICES = [
-		('cell', 'Celular'),
+		('cel', 'Celular'),
 		('tel', 'Teléfono'),
 	]
 

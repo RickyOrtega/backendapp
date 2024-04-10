@@ -1,3 +1,5 @@
+import json
+
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -46,26 +48,57 @@ def login_user(request):
 # Endpoint para crear un nuevo empleado, al crearse un empleado, obtiene un id automáticamente, el cual se devuelve en la respuesta
 @api_view(['POST'])
 def crear_empleado(request):
-    serializer = EmpleadoSerializer(data=request.data)
-    if serializer.is_valid():
-        serializer.save()
-        return Response({"mensaje": f"Empleado {serializer.data.get("id")} creado con éxito"}, status=status.HTTP_201_CREATED, content_type='application/json')
 
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST, content_type='application/json')
+    print(json.dumps(request.data, indent=4))
+
+    datos_empleado = request.data.get('empleado')
+    datos_telefono = request.data.get('telefono')
+    datos_email = request.data.get('email')
+
+    id_empleado = None
+
+    serializer_empleado = EmpleadoSerializer(data=datos_empleado)
+    if serializer_empleado.is_valid():
+        serializer_empleado.save()
+        id_empleado = serializer_empleado.data.get('id')
+
+    if id_empleado:
+
+        datos_telefono['empleado'] = id_empleado
+
+        serializer_telefono = TelefonoSerializer(data=datos_telefono)
+        if serializer_telefono.is_valid():
+            serializer_telefono.save(empleado_id=id_empleado)
+
+        datos_email['empleado'] = id_empleado
+
+        serializer_email = EmailSerializer(data=datos_email)
+        if serializer_email.is_valid():
+            serializer_email.save(empleado_id=id_empleado)
+
+        return Response({"mensaje": f"Empleado {id_empleado} creado con éxito"}, status=status.HTTP_201_CREATED, content_type='application/json')
+
+    return Response({"error": "No se pudo crear el empleado"}, status=status.HTTP_400_BAD_REQUEST, content_type='application/json')
 
 
 # Endpoint para obtener todos los empleados
 @api_view(['GET'])
 def listar_empleados(request):
+
+    # Necesitamos obtener todos los empleados, así que usamos el método all() del modelo Empleado
+    # También necesitaremos el telefono y el email de cada empleado, por lo que devolveremos los datos de estos también
     empleados = Empleado.objects.all()
-
-    # Si no hay empleados, devolver un mensaje de error
-    if not empleados.exists():
-        return Response({'error': 'No hay empleados registrados'}, status=status.HTTP_404_NOT_FOUND, content_type='application/json')
-
     serializer = EmpleadoSerializer(empleados, many=True)
 
-    return Response(serializer.data, status=status.HTTP_200_OK, content_type='application/json')
+    for empleado in serializer.data:
+        empleado_id = empleado.get('id')
+        telefono = TelefonoSerializer(Empleado.objects.get(id=empleado_id).telefonos.all(), many=True).data
+        email = EmailSerializer(Empleado.objects.get(id=empleado_id).emails.all(), many=True).data
+        empleado['telefono'] = telefono
+        empleado['email'] = email
+
+
+    return Response(serializer.data, content_type='application/json', status=status.HTTP_200_OK)
 
 
 # Endpoint para obtener detalles de un empleado
@@ -77,35 +110,77 @@ def detalle_empleado(request, pk):
         return Response({'error': 'Empleado no encontrado'}, status=status.HTTP_404_NOT_FOUND)
 
     serializer = EmpleadoSerializer(empleado)
-    return Response(serializer.data)
+    data = serializer.data.copy()  # Crear una copia de serializer.data
+    empleado_id = data.get('id')
+    telefono = TelefonoSerializer(Empleado.objects.get(id=empleado_id).telefonos.all(), many=True).data
+    email = EmailSerializer(Empleado.objects.get(id=empleado_id).emails.all(), many=True).data
+    data['telefono'] = telefono
+    data['email'] = email
+
+    return Response(data, content_type='application/json', status=status.HTTP_200_OK)
 
 
 # Endpoint para actualizar un empleado
 @api_view(['PUT'])
 def actualizar_empleado(request, pk):
+
     try:
         empleado = Empleado.objects.get(pk=pk)
     except Empleado.DoesNotExist:
         return Response({'error': 'Empleado no encontrado'}, status=status.HTTP_404_NOT_FOUND)
 
-    serializer = EmpleadoSerializer(empleado, data=request.data)
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data)
-    return Response({"mensaje": f"Empleado {serializer.data.get("id")} editado con éxito"}, status=status.HTTP_201_CREATED, content_type='application/json')
+    datos_empleado = request.data.get('empleado')
+    datos_telefono = request.data.get('telefono')
+    datos_email = request.data.get('email')
+
+    nuevo_telefono = datos_telefono.copy()
+    nuevo_telefono['empleado'] = empleado.id
+
+    nuevo_email = datos_email.copy()
+    nuevo_email['empleado'] = empleado.id
+
+    print(json.dumps(datos_telefono, indent=4))
+
+    serializer_empleado = EmpleadoSerializer(empleado, data=datos_empleado)
+    if serializer_empleado.is_valid():
+        serializer_empleado.save()
+
+    telefono = empleado.telefonos.first()
+    email = empleado.emails.first()
+
+    serializer_telefono = TelefonoSerializer(telefono, data=nuevo_telefono)
+    if serializer_telefono.is_valid():
+        serializer_telefono.save()
+
+    serializer_email = EmailSerializer(email, data=nuevo_email)
+    if serializer_email.is_valid():
+        serializer_email.save()
+
+    return Response({"mensaje": "Empleado actualizado correctamente"}, status=status.HTTP_200_OK, content_type='application/json')
+
 
 
 # Endpoint para eliminar un empleado
 @api_view(['DELETE'])
 def eliminar_empleado(request, pk):
+
+    # Intentamos obtener el empleado con el id dado
     try:
         empleado = Empleado.objects.get(pk=pk)
     except Empleado.DoesNotExist:
         return Response({'error': 'Empleado no encontrado'}, status=status.HTTP_404_NOT_FOUND)
 
-    empleado.delete()
-    return Response({"mensaje": "Empleado eliminado satisfactoriamente"},status=status.HTTP_204_NO_CONTENT)
+    # Si el empleado existe, buscamos su telefono y email y los eliminamos
+    telefono = empleado.telefonos.first()
+    email = empleado.emails.first()
 
+    telefono.delete()
+    email.delete()
+
+    # Finalmente eliminamos el empleado
+    empleado.delete()
+
+    return Response({'mensaje': 'Empleado eliminado correctamente'}, status=status.HTTP_200_OK)
 
 # Estaba teniendo algunos problemas con la BD, así que creé un endpoint para probar si la conexión estaba funcionando
 # correctamente:
