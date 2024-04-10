@@ -2,6 +2,12 @@
 
 Esta guía proporciona instrucciones detalladas sobre cómo instalar, configurar y utilizar la aplicación.
 
+### Apps
+APP | Enlance
+----|----------
+Frontend | https://github.com/RickyOrtega/frontendapp
+Backend | https://github.com/RickyOrtega/backendapp
+
 ## Requisitos Previos
 
 - Asegúrate de tener instalado Python y pip en tu sistema local.
